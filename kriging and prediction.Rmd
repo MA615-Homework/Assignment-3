@@ -40,12 +40,28 @@ library(ggplot2) # tidyverse data visualization package
 # add fips in rain 
 data('rain')      # rain from hurricaneexposuredata
 data('county_centers')      # county fips from hurricaneexposuredata
+data("hurr_tracks")
+data("storm_events")
+# hurricane tracks
+hurr_tracks %>% 
+  filter(storm_id == 'Ike-2008')
 # rain data 
 # select 'Ike-2008'
 rain_dat <- rain %>% filter(storm_id == 'Ike-2008')
 # using fips to combine
 comb_rain <- merge(rain_dat, county_centers, by = 'fips', all.x = TRUE)
 ```
+
+
+## hurricane exposure
+```{r}
+
+map_counties(storm = "Ike-2008", metric = "rainfall") 
+map_counties(storm = "Ike-2008", metric = "wind")
+map_counties(storm = "Ike-2008", metric = "distance")
+
+```
+
 
 ## Kriging
 
