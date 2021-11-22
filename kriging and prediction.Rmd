@@ -60,6 +60,38 @@ map_counties(storm = "Ike-2008", metric = "rainfall")
 map_counties(storm = "Ike-2008", metric = "wind")
 map_counties(storm = "Ike-2008", metric = "distance")
 
+
+map_counties(storm = "Ike-2008", metric = "rainfall", days_included = -1:0) + 
+        ggplot2::ggtitle("Rain during Ike (2008) for day before and day of closest approach")
+
+map_counties(storm = "Ike-2008", metric = "rainfall", days_included = -5:3) + 
+        ggplot2::ggtitle("Rain during Ike (2008) for five days before to three days\nafter the day of closest approach")
+        
+map_counties("Ike-2008", metric = "wind", wind_var = "sust_dur")
+
+map_counties("Ike-2008", metric = "wind", wind_source = "ext_tracks")
+
+#Mapping county-level binary exposure
+map_distance_exposure(storm = "Ike-2008", dist_limit = 75)
+
+map_rain_exposure(storm = "Ike-2008", rain_limit = 175, dist_limit = 500, days_included = -5:3)
+
+map_wind_exposure(storm = "Ike-2008", wind_limit = 20)
+
+map_wind_exposure(storm = "Ike-2008",wind_limit = convert_wind_speed(34, "knots", "mps"))
+
+map_event_exposure(storm = "Ike-2008", event_type = "flood")
+map_event_exposure(storm = "Ike-2008", event_type = "tornado")
+
+# Plotting storm tracks
+map_tracks(storms = "Ike-2008", alpha = 0.5, plot_points = TRUE, color = "blue")
+
+#combine
+floyd_map <- map_event_exposure(storm = "Ike-2008", event_type = "flood")
+map_tracks(storms = "Ike-2008", plot_object = floyd_map, plot_points = TRUE, color = "darkgray")
+
+plotrainfall <- map_counties(storm = "Ike-2008", metric = "rainfall") 
+ggplotly(plotrainfall)
 ```
 
 
