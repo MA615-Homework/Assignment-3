@@ -1,0 +1,141 @@
+---
+title: '1'
+author: "Tao He"
+date: "11/22/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA, echo = FALSE, message = FALSE, 
+                      warning = FALSE, margin = FALSE)
+# library packages
+library(RColorBrewer)
+library(georob)
+library(tidyverse)
+library(drat)
+library(hurricaneexposuredata)
+library(hurricaneexposure)
+
+library(sp) 
+library(gstat) 
+library(sf)
+library(magrittr)
+library(rgdal)
+
+library(sf)
+library(raster)
+library(dplyr)
+library(spData)
+library(spDataLarge)
+
+library(tmap)    # for static and interactive maps
+library(leaflet) # for interactive maps
+library(ggplot2) # tidyverse data visualization package
+```
+
+## Datasets
+
+```{r}
+# import data sets 
+# add fips in rain 
+data('rain')      # rain from hurricaneexposuredata
+data('county_centers')      # county fips from hurricaneexposuredata
+# rain data 
+# select 'Ike-2008'
+rain_dat <- rain %>% filter(storm_id == 'Ike-2008')
+# using fips to combine
+comb_rain <- merge(rain_dat, county_centers, by = 'fips', all.x = TRUE)
+```
+
+## Kriging
+
+```{r}
+# variogram
+#try from lag = -5
+comb_rain_lag1 <- comb_rain %>% filter(lag == -5)
+coordinates(comb_rain_lag1) = c('longitude', 'latitude')
+ll2 = '+proj=longlat +datum=NAD83'
+proj4string(comb_rain_lag1) = CRS(ll2)
+# MAX precipitation/10
+comb_rain_lag1$precip_max = comb_rain_lag1$precip_max /10
+summary(comb_rain_lag1$precip_max)
+
+# set v
+v_1 = variogram(precip_max ~ 1, data=comb_rain_lag1)
+plot(v_1)
+show.vgms()
+
+# try from lag = 0
+comb_rain_lag2 <- comb_rain %>% filter(lag == 0)
+coordinates(comb_rain_lag2) = c('longitude', 'latitude')
+ll2 = '+proj=longlat +datum=NAD83'
+proj4string(comb_rain_lag2) = CRS(ll2)
+comb_rain_lag2$precip_max = comb_rain_lag2$precip_max /10
+summary(comb_rain_lag2$precip_max)
+v_2 = variogram(precip_max ~ 1, data=comb_rain_lag2)
+par(las = 1)
+plot(v$dist/1000, v$gamma, xlab = "Lagged distance (h) [km]",
+     ylab = expression(paste("Semivariance (", gamma, ") [", cm^2, "]")), las = 1,
+     pch = 19)
+grid()
+points(v_2$dist/1000, v_2$gamma, pch = 19)
+text(v_2$dist/1000, v_2$gamma, pos = 1, labels = as.character(v_2$np), cex = 0.5)
+show.vgms()
+
+# select Gaussian Model
+vmi_2 = vgm(model='Gau', psill=6, range=1000*4,nugget=1)
+v.fit_2 = fit.variogram(v_2, vmi_2)
+plot(v_2, v.fit_2)
+
+# select Spherical Model
+vmi_3 = vgm(model='Sph', psill=6, range=1000*4,nugget=1)
+v.fit_3 = fit.variogram(v_2, vmi_3)
+v.fit_3
+plot(v_2, v.fit_3)
+```
+## Observation
+
+```{r}
+# shapefile
+comb_rain <- comb_rain %>% filter(lag == 0)
+county <- st_read("UScounties/UScounties.shp",quiet = TRUE)
+county$fips <- county$FIPS
+Rain <- merge(county, comb_rain, by = "fips")
+Rain1 <- Rain[,-6]  # remove the useless column
+Rain2 <- sf::st_make_valid(Rain1)
+# plot the map with precip_max
+tm_shape(Rain2) +
+  tm_polygons(col ="precip_max", palette = "Blues",style = "fixed", breaks = c(0, 14, 28, 42, 56, 70),
+              legend.hist = TRUE) +
+  tm_layout(legend.outside = TRUE) +
+  tmap_options(check.and.fix = TRUE)
+
+```
+## Prediction
+
+
+
+```{r}
+# fit the model between distance and precip_max
+model <- georob(log(precip_max+1) ~ dist, data = Rain2,
+                locations=~latitude+longitude,
+                variogram.model="RMspheric",
+                param=c(variance=0.1, nugget=1, scale=1000),tuning.psi=1000)
+
+r.pk <- predict(model, control=control.predict.georob(extended.output=TRUE))
+r.pk <- lgnpp(r.pk)
+str(r.pk)
+
+coordinates(r.pk) = c('longitude', 'latitude')
+
+# plot three prediction map
+brks <- c(25, 50, 75, 100, 150, 200, seq(500, 3500,by=500))
+my.palette <- brewer.pal(n = 5, name = "Pastel1")
+pred <- spplot(r.pk, zcol="lgn.pred", at=brks, col.regions = my.palette, cuts = 5, col = "transparent", main="prediction")
+lwr <- spplot(r.pk, zcol="lgn.lower", at=brks, col.regions = my.palette, cuts = 5, col = "transparent", main="lower bound 95% PI")
+upr <- spplot(r.pk, zcol="lgn.upper", at=brks, col.regions = my.palette, cuts = 5, col = "transparent", main="upper bound 95% PI")
+plot(pred, more=TRUE)
+plot(lwr, more=TRUE)
+plot(upr, more=FALSE)
+```
+
