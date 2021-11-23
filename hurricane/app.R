@@ -164,23 +164,27 @@ ui <- bootstrapPage(
                                          #choose slider range
                                          span(tags$i(h6('Negative day refers to the day before the hurricane Ike made landfall in the United State.')), style="color:#045a8d"),
                                          span(tags$i(h6('Day 0 indicates the landfall day. Positive day refers to the day after the landfall.')), style="color:#045a8d"),
-                                         sliderInput("lag", h3("Days included:"), 
+                                         sliderInput("lag", h3("Days included"), 
                                                      min= -5, max= 3, value= c(-5,3) ),
                                          #numeric input of rainfall, value = initial value
                                          
                                          numericInput("rain_limit", label = h3("Rain limit"), min = 0, value = 0),
                                          'unit: mm',
-                                         numericInput("dist_limit", label = h3("Distance limit unit:km"), min = 0, value = 0),
+                                         numericInput("dist_limit", label = h3("Distance limit"), min = 0, value = 0),
                                          'unit: km'), 
                                         
                         conditionalPanel(condition = "input.tabselected == 2",
                                          #numeric input of wind, value = initial value
-                                         numericInput("wind_limit", label = h3('Wind limit unit:m/s'), min = 0, value = 0),
-                                         'unit: m/s'), 
+                                         span(tags$i(h6('Identify all counties exposed to a certain level of sustained winds.')), style="color:#045a8d"),
+                                         numericInput("wind_limit", label = h3('Wind limit'), min = 0, value = 0),
+                                         'unit: m/s',
+                                         span(tags$i(h6('Use below checkbox to show the duration of winds of 20 m/s or more.')), style="color:#045a8d"),
+                                         checkboxInput('duration', label = 'Map the durition of the wind', value = FALSE, width =  "100%")), 
                                          
                         conditionalPanel(condition = "input.tabselected == 3",
+                                         span(tags$i(h6('Shows different type of hardzards with the approach of hurricane Ike in county level.')), style="color:#045a8d"),
                                          #pikcer input of event, value = initial value
-                                         pickerInput("event_select", label = h3("Event:"),   
+                                         pickerInput("event_select", label = h3("Event"),   
                                                      choices = c("flood", "tornado", "wind","tropical_storm"), 
                                                      selected = c("flood"),
                                                      multiple = FALSE)),
@@ -252,7 +256,8 @@ ui <- bootstrapPage(
                                span(tags$i(h6('Transfer the "max precipitation rainfall" to "max precipitation rainfall/10" to reduce the scale')), style="color:#045a8d"),
                                
                                condition = "input.varioselected == 2",
-                               numericInput("ObserDays", label = h3("Days"), min = -5,max = 3, value = 0)
+                               numericInput("ObserDays", label = h3("Days"), min = -5,max = 3, value = 0),
+                               'The distribution of rainfall is dispersed, we scale the breaks manually to show the max precipitaion clearly.'
                             ),
                             conditionalPanel(
                                span(tags$i(h6('According to spatial continuity, find the relationship between the distance from a point in space to the hurricane’s landfall point and the maximum rainfall, and predict the rainfall map.')), style="color:#045a8d"),
@@ -355,7 +360,10 @@ server <- function(input, output, session) {
    if(input$wind_limit > 0){
      wind_map <- map_wind_exposure(storm = "Ike-2008", wind_limit = input$wind_limit,  add_track = input$track) 
    }else{
-     wind_map <- map_counties(storm = "Ike-2008", metric = "wind", add_track = input$track) + ggtitle("Ike-2008") + theme(plot.title = element_text(hjust = 0.5))}
+     if(input$duration){
+       wind_map <- map_counties(storm = "Ike-2008", metric = "wind", add_track = input$track, wind_var = "sust_dur") + ggtitle("Ike-2008") + theme(plot.title = element_text(hjust = 0.5))
+     }else{
+     wind_map <- map_counties(storm = "Ike-2008", metric = "wind", add_track = input$track) + ggtitle("Ike-2008") + theme(plot.title = element_text(hjust = 0.5))}}
    if(input$track){
      map_tracks(storms = "Ike-2008", plot_object = wind_map, plot_points = TRUE, 
                 color = "darkgray")
