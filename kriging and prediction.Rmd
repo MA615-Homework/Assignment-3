@@ -1,0 +1,273 @@
+---
+title: '1'
+author: "Tao He"
+date: "11/22/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA, echo = FALSE, message = FALSE, 
+                      warning = FALSE, margin = FALSE)
+# library packages
+library(RColorBrewer)
+library(georob)
+library(tidyverse)
+library(drat)
+library(hurricaneexposuredata)
+library(hurricaneexposure)
+
+library(sp) 
+library(gstat) 
+library(sf)
+library(magrittr)
+library(rgdal)
+
+library(sf)
+library(raster)
+library(dplyr)
+library(spData)
+library(spDataLarge)
+
+library(tmap)    # for static and interactive maps
+library(leaflet) # for interactive maps
+library(ggplot2) # tidyverse data visualization package
+```
+
+## Datasets
+
+```{r}
+# import data sets 
+# add fips in rain 
+data('rain')      # rain from hurricaneexposuredata
+data('county_centers')      # county fips from hurricaneexposuredata
+data("hurr_tracks")
+data("storm_events")
+# hurricane tracks
+hurr_tracks %>% 
+  filter(storm_id == 'Ike-2008')
+# rain data 
+# select 'Ike-2008'
+rain_dat <- rain %>% filter(storm_id == 'Ike-2008')
+# using fips to combine
+comb_rain <- merge(rain_dat, county_centers, by = 'fips', all.x = TRUE)
+```
+
+
+## hurricane exposure
+```{r}
+
+map_counties(storm = "Ike-2008", metric = "rainfall") 
+map_counties(storm = "Ike-2008", metric = "wind")
+map_counties(storm = "Ike-2008", metric = "distance")
+
+
+map_counties(storm = "Ike-2008", metric = "rainfall", days_included = -1:0) + 
+        ggplot2::ggtitle("Rain during Ike (2008) for day before and day of closest approach")
+
+map_counties(storm = "Ike-2008", metric = "rainfall", days_included = -5:3) + 
+        ggplot2::ggtitle("Rain during Ike (2008) for five days before to three days\nafter the day of closest approach")
+        
+map_counties("Ike-2008", metric = "wind", wind_var = "sust_dur")
+
+map_counties("Ike-2008", metric = "wind", wind_source = "ext_tracks")
+
+#Mapping county-level binary exposure
+map_distance_exposure(storm = "Ike-2008", dist_limit = 75)
+
+map_rain_exposure(storm = "Ike-2008", rain_limit = 175, dist_limit = 500, days_included = -5:3)
+
+map_wind_exposure(storm = "Ike-2008", wind_limit = 20)
+
+map_wind_exposure(storm = "Ike-2008",wind_limit = convert_wind_speed(34, "knots", "mps"))
+
+map_event_exposure(storm = "Ike-2008", event_type = "flood")
+map_event_exposure(storm = "Ike-2008", event_type = "tornado")
+
+# Plotting storm tracks
+map_tracks(storms = "Ike-2008", alpha = 0.5, plot_points = TRUE, color = "blue")
+
+#combine
+floyd_map <- map_event_exposure(storm = "Ike-2008", event_type = "flood")
+map_tracks(storms = "Ike-2008", plot_object = floyd_map, plot_points = TRUE, color = "darkgray")
+
+plotrainfall <- map_counties(storm = "Ike-2008", metric = "rainfall") 
+ggplotly(plotrainfall)
+```
+## Buoys mapper
+
+```{r}
+
+bouys_name<-c('42001','42002','42035','42019','42007','42040',
+              '42020','42039','42036')
+
+
+bouys_lat<-c(25.942,26.055,29.232,27.910,30.090,29.207,
+             26.968,28.787,28.501)
+bouys_long<-c(89.657,93.646,94.413,95.345,88.769,88.237,
+              96.693,86.007,84.508)
+
+
+dat.frame<-data.frame(Name=bouys_name,Lat=bouys_lat,Long=bouys_long*-1)
+
+leaflet(dat.frame) %>% addTiles() %>%
+  addMarkers(~Long, ~Lat, popup = ~htmlEscape(Name))
+```
+
+
+
+```{r}
+tranbouy<-t(bouy_data)
+colnames(tranbouy)<-tranbouy[1,]
+tranbouy<-tranbouy[-1,]
+tranbouy<-cbind(Name=row.names(tranbouy),tranbouy)
+tranbouy<-data.frame(tranbouy)
+buoytime<-left_join(dat.frame,tranbouy,by='Name')
+for(i in 4:243)
+buoytime[,i]<-as.numeric(buoytime[,i])
+
+# if I want time as tag=80
+i<-80
+leaflet(buoytime) %>% addTiles() %>%
+  addCircles(lng=~Long, lat=~Lat,radius= buoytime[,i+3]*5000, popup = str_c(buoytime$Name,':',buoytime[,i+3],'m/s') )
+##5000?
+print(bouy_data$TIME[i])#time of this map
+```
+
+## Kriging
+
+```{r}
+# variogram
+#try from lag = -5
+comb_rain_lag1 <- comb_rain %>% filter(lag == -5)
+coordinates(comb_rain_lag1) = c('longitude', 'latitude')
+ll2 = '+proj=longlat +datum=NAD83'
+proj4string(comb_rain_lag1) = CRS(ll2)
+# MAX precipitation/10
+comb_rain_lag1$precip_max = comb_rain_lag1$precip_max /10
+summary(comb_rain_lag1$precip_max)
+
+# set v
+v_1 = variogram(precip_max ~ 1, data=comb_rain_lag1)
+plot(v_1)
+show.vgms()
+
+# try from lag = 0
+comb_rain_lag2 <- comb_rain %>% filter(lag == 0)
+coordinates(comb_rain_lag2) = c('longitude', 'latitude')
+ll2 = '+proj=longlat +datum=NAD83'
+proj4string(comb_rain_lag2) = CRS(ll2)
+comb_rain_lag2$precip_max = comb_rain_lag2$precip_max /10
+summary(comb_rain_lag2$precip_max)
+v_2 = variogram(precip_max ~ 1, data=comb_rain_lag2)
+par(las = 1)
+plot(v$dist/1000, v$gamma, xlab = "Lagged distance (h) [km]",
+     ylab = expression(paste("Semivariance (", gamma, ") [", cm^2, "]")), las = 1,
+     pch = 19)
+grid()
+points(v_2$dist/1000, v_2$gamma, pch = 19)
+text(v_2$dist/1000, v_2$gamma, pos = 1, labels = as.character(v_2$np), cex = 0.5)
+show.vgms()
+
+# select Gaussian Model
+vmi_2 = vgm(model='Gau', psill=6, range=1000*4,nugget=1)
+v.fit_2 = fit.variogram(v_2, vmi_2)
+plot(v_2, v.fit_2)
+
+# select Spherical Model
+vmi_3 = vgm(model='Sph', psill=6, range=1000*4,nugget=1)
+v.fit_3 = fit.variogram(v_2, vmi_3)
+v.fit_3
+plot(v_2, v.fit_3)
+```
+## Observation
+
+```{r}
+# shapefile
+comb_rain <- comb_rain %>% filter(lag == 0)
+county <- st_read("UScounties/UScounties.shp",quiet = TRUE)
+county$fips <- county$FIPS
+Rain <- merge(county, comb_rain, by = "fips")
+Rain1 <- Rain[,-6]  # remove the useless column
+Rain2 <- sf::st_make_valid(Rain1)
+# plot the map with precip_max
+tm_shape(Rain2) +
+  tm_polygons(col ="precip_max", palette = "Blues",style = "fixed", breaks = c(0, 14, 28, 42, 56, 70),
+              legend.hist = TRUE) +
+  tm_layout(legend.outside = TRUE) +
+  tmap_options(check.and.fix = TRUE)
+
+```
+## Prediction
+
+
+
+```{r}
+# fit the model between distance and precip_max
+model <- georob(log(precip_max+1) ~ dist, data = Rain2,
+                locations=~latitude+longitude,
+                variogram.model="RMspheric",
+                param=c(variance=0.1, nugget=1, scale=1000),tuning.psi=1000)
+
+r.pk <- predict(model, control=control.predict.georob(extended.output=TRUE))
+r.pk <- lgnpp(r.pk)
+str(r.pk)
+
+coordinates(r.pk) = c('longitude', 'latitude')
+
+# plot three prediction map
+brks <- c(25, 50, 75, 100, 150, 200, seq(500, 3500,by=500))
+my.palette <- brewer.pal(n = 5, name = "Pastel1")
+pred <- spplot(r.pk, zcol="lgn.pred", at=brks, col.regions = my.palette, cuts = 5, col = "transparent", main="prediction")
+lwr <- spplot(r.pk, zcol="lgn.lower", at=brks, col.regions = my.palette, cuts = 5, col = "transparent", main="lower bound 95% PI")
+upr <- spplot(r.pk, zcol="lgn.upper", at=brks, col.regions = my.palette, cuts = 5, col = "transparent", main="upper bound 95% PI")
+plot(pred, more=TRUE)
+plot(lwr, more=TRUE)
+plot(upr, more=FALSE)
+```
+## Data
+
+```{r}
+
+url1 <- "http://www.ndbc.noaa.gov/view_text_file.php?filename="
+url2 <- ".txt.gz&dir=data/historical/stdmet/"
+urls <- str_c(url1, bouys_name,"h2008", url2, sep = "")
+
+for(i in 1:9){
+  suppressMessages(
+    bouy_table <- read_table(urls[i], col_names = TRUE))
+  bouy_table <- bouy_table[-1,]
+  bouy_table$DATE <- paste0(bouy_table$`#YY`,'-',bouy_table$MM,'-',bouy_table$DD)
+  bouy_table$DATE <- as.Date(bouy_table$DATE)
+  
+  bouy_sub <- bouy_table %>% filter(DATE >= '2008-09-9' & DATE <= '2008-09-18')
+  bouy_sub$WSPD <- as.numeric(bouy_sub$WSPD)
+  
+  bouy_sub$TIME <- paste0(bouy_sub$DATE,' ',bouy_sub$hh,":",bouy_sub$mm,':00' )
+  bouy_sub$TIME <- as.POSIXct(bouy_sub$TIME)
+  
+  if(i==1)
+    bouy_data<-data.frame(TIME=bouy_sub$TIME,WSPD=bouy_sub$WSPD)
+  else{
+    tmp<-data.frame(TIME=bouy_sub$TIME,WSPD=bouy_sub$WSPD)
+    bouy_data<-left_join(bouy_data,tmp,by="TIME")
+    }
+}
+  
+colnames(bouy_data)<- c('TIME', bouys_name)
+for(i in 2:10)
+  for(j in 1:240){
+    if(is.na(bouy_data[j,i])){
+      jtmp=j+1
+      while(is.na(bouy_data[jtmp,i])) jtmp<-jtmp+1
+      bouy_data[j,i]<-mean(bouy_data[j-1,i],bouy_data[jtmp,i])
+      
+    }
+  }
+bouy_data
+```
+```{r}
+#show data
+library(DT)
+Ikedata<-hurr_tracks %>%filter(storm_id == 'Ike-2008')
+datatable(Ikedata, options = list(pageLength = 5))
+```
