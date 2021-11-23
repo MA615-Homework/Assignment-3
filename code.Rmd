@@ -1,6 +1,6 @@
 ---
-title: '1'
-author: "Tao He"
+title: 'Hurricane Exposure'
+author: "Tao He, Zhihui Zhang, Keliang Xu, Shicong Wang"
 date: "11/22/2021"
 output: html_document
 ---
